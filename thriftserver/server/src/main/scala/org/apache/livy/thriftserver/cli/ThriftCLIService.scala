@@ -397,7 +397,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
   override def GetTypeInfo(req: TGetTypeInfoReq): TGetTypeInfoResp = {
     val resp = new TGetTypeInfoResp
     try {
-      val operationHandle = cliService.getTypeInfo(new SessionHandle(req.getSessionHandle))
+      val operationHandle = cliService.getTypeInfo(createSessionHandle(req.getSessionHandle))
       resp.setOperationHandle(operationHandle.toTOperationHandle)
       resp.setStatus(ThriftCLIService.OK_STATUS)
     } catch {
@@ -412,7 +412,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
   override def GetCatalogs(req: TGetCatalogsReq): TGetCatalogsResp = {
     val resp = new TGetCatalogsResp
     try {
-      val opHandle = cliService.getCatalogs(new SessionHandle(req.getSessionHandle))
+      val opHandle = cliService.getCatalogs(createSessionHandle(req.getSessionHandle))
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(ThriftCLIService.OK_STATUS)
     } catch {
@@ -427,8 +427,8 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
   override def GetSchemas(req: TGetSchemasReq): TGetSchemasResp = {
     val resp = new TGetSchemasResp
     try {
-      val opHandle = cliService.getSchemas(
-        new SessionHandle(req.getSessionHandle), req.getCatalogName, req.getSchemaName)
+      val opHandle = cliService.getSchemas(createSessionHandle(req.getSessionHandle),
+        req.getCatalogName, req.getSchemaName)
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(ThriftCLIService.OK_STATUS)
     } catch {
@@ -444,7 +444,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
     val resp = new TGetTablesResp
     try {
       val opHandle = cliService.getTables(
-        new SessionHandle(req.getSessionHandle),
+        createSessionHandle(req.getSessionHandle),
         req.getCatalogName,
         req.getSchemaName,
         req.getTableName,
@@ -463,7 +463,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
   override def GetTableTypes(req: TGetTableTypesReq): TGetTableTypesResp = {
     val resp = new TGetTableTypesResp
     try {
-      val opHandle = cliService.getTableTypes(new SessionHandle(req.getSessionHandle))
+      val opHandle = cliService.getTableTypes(createSessionHandle(req.getSessionHandle))
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(ThriftCLIService.OK_STATUS)
     } catch {
@@ -479,7 +479,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
     val resp = new TGetColumnsResp
     try {
       val opHandle = cliService.getColumns(
-        new SessionHandle(req.getSessionHandle),
+        createSessionHandle(req.getSessionHandle),
         req.getCatalogName,
         req.getSchemaName,
         req.getTableName,
@@ -499,7 +499,7 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
     val resp = new TGetFunctionsResp
     try {
       val opHandle = cliService.getFunctions(
-        new SessionHandle(req.getSessionHandle),
+        createSessionHandle(req.getSessionHandle),
         req.getCatalogName,
         req.getSchemaName,
         req.getFunctionName)
@@ -727,6 +727,13 @@ abstract class ThriftCLIService(val cliService: LivyCLIService, val serviceName:
         throw new HiveSQLException(
           s"Failed to validate proxy privilege of $realUser for $proxyUser", "08S01", e)
     }
+  }
+
+  private def createSessionHandle(tHandle: TSessionHandle): SessionHandle = {
+    val protocolVersion = cliService.getSessionManager
+      .getSessionInfo(new SessionHandle(tHandle))
+      .protocolVersion
+    new SessionHandle(tHandle, protocolVersion)
   }
 }
 

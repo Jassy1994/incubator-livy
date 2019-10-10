@@ -73,8 +73,12 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
 
   protected[this] final val idCounter = new AtomicInteger(0)
   protected[this] final val sessions = mutable.LinkedHashMap[Int, S]()
+  private[this] final val sessionsByName = mutable.HashMap[String, S]()
+
 
   private[this] final val sessionTimeoutCheck = livyConf.getBoolean(LivyConf.SESSION_TIMEOUT_CHECK)
+  private[this] final val sessionTimeoutCheckSkipBusy =
+    livyConf.getBoolean(LivyConf.SESSION_TIMEOUT_CHECK_SKIP_BUSY)
   private[this] final val sessionTimeout =
     TimeUnit.MILLISECONDS.toNanos(livyConf.getTimeAsMs(LivyConf.SESSION_TIMEOUT))
   private[this] final val sessionStateRetainedInSec =
@@ -92,12 +96,26 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
   def register(session: S): S = {
     info(s"Registering new session ${session.id}")
     synchronized {
+      session.name.foreach { sessionName =>
+        if (sessionsByName.contains(sessionName)) {
+          val errMsg = s"Duplicate session name: ${session.name} for session ${session.id}"
+          error(errMsg)
+          session.stop()
+          throw new IllegalArgumentException(errMsg)
+        } else {
+          sessionsByName.put(sessionName, session)
+        }
+      }
       sessions.put(session.id, session)
+      session.start()
     }
+    info(s"Registered new session ${session.id}")
     session
   }
 
   def get(id: Int): Option[S] = sessions.get(id)
+
+  def get(sessionName: String): Option[S] = sessionsByName.get(sessionName)
 
   def size(): Int = sessions.size
 
@@ -108,16 +126,20 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
   }
 
   def delete(session: S): Future[Unit] = {
+    info(s"Deleting session ${session.id}")
     session.stop().map { case _ =>
       try {
         sessionStore.remove(sessionType, session.id)
         synchronized {
           sessions.remove(session.id)
+          session.name.foreach(sessionsByName.remove)
         }
       } catch {
         case NonFatal(e) =>
           error("Exception was thrown during stop session:", e)
           throw e
+      } finally {
+        info(s"Deleted session ${session.id}")
       }
     }
   }
@@ -139,6 +161,8 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
           currentTime - s.time > sessionStateRetainedInSec
         case _ =>
           if (!sessionTimeoutCheck) {
+            false
+          } else if (session.state == SessionState.Busy && sessionTimeoutCheckSkipBusy) {
             false
           } else if (session.isInstanceOf[BatchSession]) {
             false

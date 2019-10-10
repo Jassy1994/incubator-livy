@@ -107,9 +107,8 @@ private[livy] class AccessManager(conf: LivyConf) extends Logging {
    */
   def checkImpersonation(
       target: Option[String],
-      requestUser: String,
-      livyConf: LivyConf): Option[String] = {
-    if (livyConf.getBoolean(LivyConf.IMPERSONATION_ENABLED)) {
+      requestUser: String): Option[String] = {
+    if (conf.getBoolean(LivyConf.IMPERSONATION_ENABLED)) {
       if (!target.forall(hasSuperAccess(_, requestUser))) {
         throw new AccessControlException(
           s"User '$requestUser' not allowed to impersonate '$target'.")
@@ -128,16 +127,22 @@ private[livy] class AccessManager(conf: LivyConf) extends Logging {
   }
 
   /**
-   * Check that the request's user has modify access to resources owned by the given target user.
+   * Check that the request's user has modify access to resources whose owner is the given target
+   * user or whose proxy user is the given proxy user.
    */
-  def hasModifyAccess(target: String, requestUser: String): Boolean = {
-    requestUser == target || checkModifyPermissions(requestUser)
+  def hasModifyAccess(target: String, requestUser: String, proxyUser: String = ""): Boolean = {
+    requestUser == target  ||
+    proxyUser == requestUser ||
+    checkModifyPermissions(requestUser)
   }
 
   /**
-   * Check that the request's user has view access to resources owned by the given target user.
+   * Check that the request's user has view access to resources whose owner is the given target
+   * user or whose proxy user is the given proxy user.
    */
-  def hasViewAccess(target: String, requestUser: String): Boolean = {
-    requestUser == target || checkViewPermissions(requestUser)
+  def hasViewAccess(target: String, requestUser: String, proxyUser: String = ""): Boolean = {
+    requestUser == target ||
+    proxyUser == requestUser ||
+    checkViewPermissions(requestUser)
   }
 }

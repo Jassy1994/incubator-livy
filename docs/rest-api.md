@@ -305,7 +305,7 @@ Cancel the specified statement in this session.
   <tr><th>Name</th><th>Description</th><th>Type</th></tr>
   <tr>
     <td>msg</td>
-    <td>is always "cancelled"</td>
+    <td>is always "canceled"</td>
     <td>string</td>
   </tr>
 </table>
@@ -590,7 +590,7 @@ A session represents an interactive shell.
   </tr>
   <tr>
     <td>kind</td>
-    <td>Session kind (spark, pyspark, or sparkr)</td>
+    <td>Session kind (spark, pyspark, sparkr, or sql)</td>
     <td><a href="#session-kind">session kind</a></td>
   </tr>
   <tr>
@@ -726,6 +726,21 @@ A statement represents the result of an execution statement.
     <td>The execution output</td>
     <td>statement output</td>
   </tr>
+  <tr>
+     <td>progress</td>
+     <td>The execution progress</td>
+     <td>double</td>
+  </tr>
+  <tr>
+     <td>started</td>
+     <td>The start time of statement code</td>
+     <td>long</td>
+  </tr>
+  <tr>
+     <td>completed</td>
+     <td>The complete time of statement code</td>
+     <td>long</td>
+  </tr> 
 </table>
 
 #### Statement State
@@ -810,3 +825,10 @@ A statement represents the result of an execution statement.
     <td>string</td>
   </tr>
 </table>
+
+### Proxy User - `doAs` support
+If superuser support is configured, Livy supports the `doAs` query parameter
+to specify the user to impersonate. The `doAs` query parameter can be used
+on any supported REST endpoint described above to perform the action as the
+specified user. If both `doAs` and `proxyUser` are specified during session
+or batch creation, the `doAs` parameter takes precedence.

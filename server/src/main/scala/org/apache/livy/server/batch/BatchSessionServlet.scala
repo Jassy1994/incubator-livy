@@ -27,6 +27,9 @@ import org.apache.livy.utils.AppInfo
 
 case class BatchSessionView(
   id: Long,
+  name: Option[String],
+  owner: String,
+  proxyUser: Option[String],
   state: String,
   appId: Option[String],
   appInfo: AppInfo,
@@ -42,12 +45,16 @@ class BatchSessionServlet(
 
   override protected def createSession(req: HttpServletRequest): BatchSession = {
     val createRequest = bodyAs[CreateBatchRequest](req)
+    val sessionId = sessionManager.nextId()
+    val sessionName = createRequest.name
     BatchSession.create(
-      sessionManager.nextId(),
+      sessionId,
+      sessionName,
       createRequest,
       livyConf,
       accessManager,
       remoteUser(req),
+      proxyUser(req, createRequest.proxyUser),
       sessionStore)
   }
 
@@ -55,7 +62,9 @@ class BatchSessionServlet(
       session: BatchSession,
       req: HttpServletRequest): Any = {
     val logs =
-      if (accessManager.hasViewAccess(session.owner, remoteUser(req))) {
+      if (accessManager.hasViewAccess(session.owner,
+                                      effectiveUser(req),
+                                      session.proxyUser.getOrElse(""))) {
         val lines = session.logLines()
 
         val size = 10
@@ -66,7 +75,8 @@ class BatchSessionServlet(
       } else {
         Nil
       }
-    BatchSessionView(session.id, session.state.toString, session.appId, session.appInfo, logs)
+    BatchSessionView(session.id, session.name, session.owner, session.proxyUser,
+      session.state.toString, session.appId, session.appInfo, logs)
   }
 
 }

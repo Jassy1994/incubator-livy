@@ -122,6 +122,7 @@ class SparkYarnApp private[utils] (
   with Logging {
   import SparkYarnApp._
 
+  private var killed = false
   private val appIdPromise: Promise[ApplicationId] = Promise()
   private[utils] var state: SparkApp.State = SparkApp.State.STARTING
   private var yarnDiagnostics: IndexedSeq[String] = IndexedSeq.empty[String]
@@ -132,6 +133,7 @@ class SparkYarnApp private[utils] (
     ("\nYARN Diagnostics: " +: yarnDiagnostics)
 
   override def kill(): Unit = synchronized {
+    killed = true
     if (isRunning) {
       try {
         val timeout = SparkYarnApp.getYarnTagToAppIdTimeout(livyConf)
@@ -147,6 +149,10 @@ class SparkYarnApp private[utils] (
         process.foreach(_.destroy())
       }
     }
+  }
+
+  private def isProcessErrExit(): Boolean = {
+    process.isDefined && !process.get.isAlive && process.get.exitValue() != 0
   }
 
   private def changeState(newState: SparkApp.State.Value): Unit = {
@@ -169,6 +175,10 @@ class SparkYarnApp private[utils] (
       appTag: String,
       pollInterval: Duration,
       deadline: Deadline): ApplicationId = {
+    if (isProcessErrExit()) {
+      throw new IllegalStateException("spark-submit start failed")
+    }
+
     val appTagLowerCase = appTag.toLowerCase()
 
     // FIXME Should not loop thru all YARN applications but YarnClient doesn't offer an API.
@@ -199,7 +209,8 @@ class SparkYarnApp private[utils] (
       .getOrElse(IndexedSeq.empty)
   }
 
-  private def isRunning: Boolean = {
+  // Exposed for unit test.
+  private[utils] def isRunning: Boolean = {
     state != SparkApp.State.FAILED && state != SparkApp.State.FINISHED &&
       state != SparkApp.State.KILLED
   }
@@ -215,7 +226,8 @@ class SparkYarnApp private[utils] (
            (YarnApplicationState.SUBMITTED, FinalApplicationStatus.UNDEFINED) |
            (YarnApplicationState.ACCEPTED, FinalApplicationStatus.UNDEFINED) =>
         SparkApp.State.STARTING
-      case (YarnApplicationState.RUNNING, FinalApplicationStatus.UNDEFINED) =>
+      case (YarnApplicationState.RUNNING, FinalApplicationStatus.UNDEFINED) |
+           (YarnApplicationState.RUNNING, FinalApplicationStatus.SUCCEEDED) =>
         SparkApp.State.RUNNING
       case (YarnApplicationState.FINISHED, FinalApplicationStatus.SUCCEEDED) =>
         SparkApp.State.FINISHED
@@ -264,6 +276,14 @@ class SparkYarnApp private[utils] (
             appReport.getApplicationId,
             appReport.getYarnApplicationState,
             appReport.getFinalApplicationStatus))
+
+          if (isProcessErrExit()) {
+            if (killed) {
+              changeState(SparkApp.State.KILLED)
+            } else {
+              changeState(SparkApp.State.FAILED)
+            }
+          }
 
           val latestAppInfo = {
             val attempt =
